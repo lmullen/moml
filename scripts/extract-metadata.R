@@ -31,7 +31,7 @@ log_formatter <- function(event) {
   paste(c(format(event$time, "%Y-%m-%d %H:%M:%OS3"), event$level, opt$INPUT,
           event$message), collapse = " - ")
 }
-log_file("logs/extract-metadata.log", INFO, WARN, ERROR, .formatter = log_formatter)
+log_file("logs/extract-metadata.log", .formatter = log_formatter)
 
 # Default locations for exporting data
 if (is.null(opt$authors)) opt$authors <- "data/authors.csv"
@@ -52,6 +52,7 @@ extract_tag <- function(xml, tag) {
   if (length(out) == 0) out <- NA_character_
   out
 }
+
 
 # We will need the document ID as the key in the tables
 document_id <- book_info %>% extract_tag("documentID")
@@ -79,16 +80,33 @@ moml_subject_sources <- rep("MOML", 3)
 moml_subject_types <- c("subject1", "subject2", "subject3")
 moml_subjects <- map_chr(moml_subject_types,
                          function(x) extract_tag(book_info, x))
-moml_subject_parts <- rep(NA_character_, 3)
 
-subjects <- tibble(
+moml_subjects_df <- tibble(
   document_id = document_id,
-  subject_source = c(moml_subject_sources),
-  subject_type = c(moml_subject_types),
-  subject = c(moml_subjects),
-  subject_part_1 = c(moml_subject_parts),
-  subject_part_2 = c(moml_subject_parts)
+  subject_source = moml_subject_sources,
+  subject_type = moml_subject_types,
+  subject = moml_subjects
 )
+
+extract_loc_subject <- function(subject) {
+  source <- "LOC"
+  type <- subject %>% xml_attr("type")
+  parts <- map_chr(xml_children(subject),
+                   function(x) x %>% xml_contents() %>% as.character())
+  subject <- paste(parts, collapse = " -- ")
+  tibble(document_id = document_id,
+         subject_source = source,
+         subject_type = type,
+         subject = subject
+         )
+}
+
+loc_subjects_df <- book_info %>%
+  xml_find_all("locSubjectHead") %>%
+  map(extract_loc_subject) %>%
+  dplyr::bind_rows()
+
+subjects <- dplyr::bind_rows(moml_subjects_df, loc_subjects_df)
 
 # Write to files, appending if the file already exists
 write_csv(titles, path = opt$titles, append = file.exists(opt$titles))
