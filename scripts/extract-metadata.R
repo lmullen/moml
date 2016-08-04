@@ -13,30 +13,34 @@ suppressPackageStartupMessages(library(purrr))
 
 "Extract metadata from XML record from the Making of Modern Law
 
-Usage: extract-metadata.R INPUT [--authors=<authors>] [--subjects=<subjects>] [--titles=<titles>]
+Usage: extract-metadata.R INPUT [--authors=<authors>] [--subjects=<subjects>] [--titles=<titles> --logfile=<logfile>]
 
 Options:
-  <INPUT>                   Path to XML record from MoML.
+  <INPUT>                    Path to XML record from MoML.
      --authors=<authors>     Path to CSV file to append author metadata.
      --subjects=<subjects>   Path to CSV file to append subject metadata.
-     --titles=<titles>        Path to CSV file to append title information.
+     --titles=<titles>       Path to CSV file to append title information.
+     --logfile=<logfile>     Path to file for logging.
   -h --help                 Show this message.
 " -> doc
 
 opt <- docopt(doc)
-
-# Logging
-dir.create("logs", showWarnings = FALSE)
-log_formatter <- function(event) {
-  paste(c(format(event$time, "%Y-%m-%d %H:%M:%OS3"), event$level, opt$INPUT,
-          event$message), collapse = " - ")
-}
-log_file("logs/extract-metadata.log", .formatter = log_formatter)
+# opt <- docopt(doc, args = "test/20004432800/xml/20004432800.xml")
 
 # Default locations for exporting data
 if (is.null(opt$authors)) opt$authors <- "data/authors.csv"
 if (is.null(opt$subjects)) opt$subjects <- "data/subjects.csv"
 if (is.null(opt$titles)) opt$titles <- "data/titles.csv"
+if (is.null(opt$logfile)) opt$logfile <- "logs/extract-metadata.log"
+
+# Logging
+dir.create(dirname(opt$logfile), showWarnings = FALSE)
+log_formatter <- function(event) {
+  paste(c(format(event$time, "%Y-%m-%d %H:%M:%OS3"), event$level, opt$INPUT,
+          event$message), collapse = " - ")
+}
+log_file("logs/extract-metadata.log", .formatter = log_formatter,
+         overwrite = FALSE)
 
 # Check inputs for errors
 stopifnot(file.exists(opt$INPUT))
@@ -44,15 +48,16 @@ stopifnot(dir.exists(dirname(opt$authors)))
 stopifnot(dir.exists(dirname(opt$subjects)))
 stopifnot(dir.exists(dirname(opt$titles)))
 
+# Read XML and get the relevant metadata portions
 xml <- read_xml(opt$INPUT)
 book_info <- xml %>% xml_find_first("bookInfo")
+citation <- xml %>% xml_find_first("citation")
 
 extract_tag <- function(xml, tag) {
   out <- xml %>% xml_child(tag) %>% xml_contents() %>% as.character()
   if (length(out) == 0) out <- NA_character_
   out
 }
-
 
 # We will need the document ID as the key in the tables
 document_id <- book_info %>% extract_tag("documentID")
@@ -71,10 +76,6 @@ titles <- tibble(
   category_code = extract_tag(book_info, "categoryCode")
 )
 stopifnot(nrow(titles) == 1)
-
-authors <- tibble(
-  document_id = document_id
-)
 
 moml_subject_sources <- rep("MOML", 3)
 moml_subject_types <- c("subject1", "subject2", "subject3")
@@ -103,10 +104,36 @@ extract_loc_subject <- function(subject) {
 
 loc_subjects_df <- book_info %>%
   xml_find_all("locSubjectHead") %>%
-  map(extract_loc_subject) %>%
-  dplyr::bind_rows()
+  map_df(extract_loc_subject)
 
 subjects <- dplyr::bind_rows(moml_subjects_df, loc_subjects_df)
+
+extract_author <- function(ag) {
+  author <- ag %>% xml_child() %>% xml_child("marcName") %>%
+    xml_contents() %>% as.character()
+  birth_year <- ag %>% xml_child() %>% xml_child("birthDate") %>%
+    xml_contents() %>% as.character()
+  death_year <- ag %>% xml_child() %>% xml_child("deathDate") %>%
+    xml_contents() %>% as.character()
+  marc_dates <- ag %>% xml_child() %>% xml_child("marcDate") %>%
+    xml_contents() %>% as.character()
+  byline <- ag %>% xml_child("byline") %>% xml_contents() %>% as.character()
+  if (length(author) == 0L) { author <- NA_character_ }
+  if (length(birth_year) == 0L) { birth_year <- NA_character_ }
+  if (length(death_year) == 0L) { death_year <- NA_character_ }
+  if (length(marc_dates) == 0L) { marc_dates <- NA_character_ }
+  if (length(byline) == 0L) { byline <- NA_character_ }
+  tibble(document_id = document_id,
+         author = author,
+         birth_year = birth_year,
+         death_year = death_year,
+         marc_dates = marc_dates,
+         byline = byline)
+}
+
+authors <- citation %>%
+  xml_find_all("authorGroup") %>%
+  map_df(extract_author)
 
 # Write to files, appending if the file already exists
 write_csv(titles, path = opt$titles, append = file.exists(opt$titles))
