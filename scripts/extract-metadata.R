@@ -52,6 +52,9 @@ stopifnot(dir.exists(dirname(opt$titles)))
 xml <- read_xml(opt$INPUT)
 book_info <- xml %>% xml_find_first("bookInfo")
 citation <- xml %>% xml_find_first("citation")
+title_group <- citation %>% xml_find_first("titleGroup")
+volume_group <- citation %>% xml_find_first("volumeGroup")
+imprint <- citation %>% xml_find_first("imprint")
 
 extract_tag <- function(xml, tag) {
   out <- xml %>% xml_child(tag) %>% xml_contents() %>% as.character()
@@ -65,6 +68,9 @@ document_id <- book_info %>% extract_tag("documentID")
 # Extract the metadata into the three tables
 titles <- tibble(
   document_id = document_id,
+  title_full = extract_tag(title_group, "fullTitle"),
+  title_display = extract_tag(title_group, "displayTitle"),
+  title_variant = extract_tag(title_group, "variantTitle"),
   publication_date = extract_tag(book_info, "pubDate") %>% ymd(),
   language = extract_tag(book_info, "language"),
   collection_id = extract_tag(book_info, "collectionId"),
@@ -73,7 +79,17 @@ titles <- tibble(
   source_library = extract_tag(book_info, "sourceLibrary"),
   notes = extract_tag(book_info, "notes"),
   comments = extract_tag(book_info, "comments"),
-  category_code = extract_tag(book_info, "categoryCode")
+  category_code = extract_tag(book_info, "categoryCode"),
+  volume_current = extract_tag(volume_group, "currentVolume"),
+  volume_total = extract_tag(volume_group, "totalVolumes"),
+  imprint_full = extract_tag(imprint, "imprintFull"),
+  imprint_city = extract_tag(imprint, "imprintCity"),
+  imprint_publisher = extract_tag(imprint, "imprintPublisher"),
+  imprint_year = extract_tag(imprint, "imprintYear"),
+  collation = extract_tag(citation, "collation"),
+  publication_place = extract_tag(citation, "publicationPlace"),
+  page_count = extract_tag(citation, "totalPages"),
+  page_count_type = citation %>% xml_find_first("totalPages") %>% xml_attr("type")
 )
 stopifnot(nrow(titles) == 1)
 
@@ -109,20 +125,11 @@ loc_subjects_df <- book_info %>%
 subjects <- dplyr::bind_rows(moml_subjects_df, loc_subjects_df)
 
 extract_author <- function(ag) {
-  author <- ag %>% xml_child() %>% xml_child("marcName") %>%
-    xml_contents() %>% as.character()
-  birth_year <- ag %>% xml_child() %>% xml_child("birthDate") %>%
-    xml_contents() %>% as.character()
-  death_year <- ag %>% xml_child() %>% xml_child("deathDate") %>%
-    xml_contents() %>% as.character()
-  marc_dates <- ag %>% xml_child() %>% xml_child("marcDate") %>%
-    xml_contents() %>% as.character()
-  byline <- ag %>% xml_child("byline") %>% xml_contents() %>% as.character()
-  if (length(author) == 0L) { author <- NA_character_ }
-  if (length(birth_year) == 0L) { birth_year <- NA_character_ }
-  if (length(death_year) == 0L) { death_year <- NA_character_ }
-  if (length(marc_dates) == 0L) { marc_dates <- NA_character_ }
-  if (length(byline) == 0L) { byline <- NA_character_ }
+  author <- ag %>% xml_child() %>% extract_tag("marcName")
+  birth_year <- ag %>% xml_child() %>% extract_tag("birthDate")
+  death_year <- ag %>% xml_child() %>% extract_tag("deathDate")
+  marc_dates <- ag %>% xml_child() %>% extract_tag("marcDate")
+  byline <- ag %>% extract_tag("byline")
   tibble(document_id = document_id,
          author = author,
          birth_year = birth_year,
