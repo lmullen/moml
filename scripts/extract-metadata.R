@@ -13,15 +13,15 @@ suppressPackageStartupMessages(library(purrr))
 
 "Extract metadata from XML record from the Making of Modern Law
 
-Usage: extract-metadata.R INPUT [--authors=<authors>] [--subjects=<subjects>] [--titles=<titles> --logfile=<logfile>]
+Usage: extract-metadata.R INPUT [--authors=<authors>] [--subjects=<subjects>] [--items=<items> --logfile=<logfile>]
 
 Options:
   <INPUT>                    Path to XML record from MoML.
      --authors=<authors>     Path to CSV file to append author metadata.
      --subjects=<subjects>   Path to CSV file to append subject metadata.
-     --titles=<titles>       Path to CSV file to append title information.
+     --items=<items>         Path to CSV file to append item metadata.
      --logfile=<logfile>     Path to file for logging.
-  -h --help                 Show this message.
+  -h --help                  Show this message.
 " -> doc
 
 opt <- docopt(doc)
@@ -30,7 +30,7 @@ opt <- docopt(doc)
 # Default locations for exporting data
 if (is.null(opt$authors)) opt$authors <- "data/authors.csv"
 if (is.null(opt$subjects)) opt$subjects <- "data/subjects.csv"
-if (is.null(opt$titles)) opt$titles <- "data/titles.csv"
+if (is.null(opt$items)) opt$items <- "data/items.csv"
 if (is.null(opt$logfile)) opt$logfile <- "logs/extract-metadata.log"
 
 # Logging
@@ -46,7 +46,7 @@ log_file("logs/extract-metadata.log", .formatter = log_formatter,
 stopifnot(file.exists(opt$INPUT))
 stopifnot(dir.exists(dirname(opt$authors)))
 stopifnot(dir.exists(dirname(opt$subjects)))
-stopifnot(dir.exists(dirname(opt$titles)))
+stopifnot(dir.exists(dirname(opt$items)))
 
 # Read XML and get the relevant metadata portions
 xml <- read_xml(opt$INPUT)
@@ -66,7 +66,7 @@ extract_tag <- function(xml, tag) {
 document_id <- book_info %>% extract_tag("documentID")
 
 # Extract the metadata into the three tables
-titles <- tibble(
+items <- tibble(
   document_id = document_id,
   title_full = extract_tag(title_group, "fullTitle"),
   title_display = extract_tag(title_group, "displayTitle"),
@@ -91,7 +91,7 @@ titles <- tibble(
   page_count = extract_tag(citation, "totalPages"),
   page_count_type = citation %>% xml_find_first("totalPages") %>% xml_attr("type")
 )
-stopifnot(nrow(titles) == 1)
+stopifnot(nrow(items) == 1)
 
 moml_subject_sources <- rep("MOML", 3)
 moml_subject_types <- c("subject1", "subject2", "subject3")
@@ -143,6 +143,6 @@ authors <- citation %>%
   map_df(extract_author)
 
 # Write to files, appending if the file already exists
-write_csv(titles, path = opt$titles, append = file.exists(opt$titles))
+write_csv(items, path = opt$items, append = file.exists(opt$items))
 write_csv(authors, path = opt$authors, append = file.exists(opt$authors))
 write_csv(subjects, path = opt$subjects, append = file.exists(opt$subjects))
