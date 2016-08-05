@@ -13,7 +13,7 @@ suppressPackageStartupMessages(library(purrr))
 
 "Extract metadata from XML record from the Making of Modern Law
 
-Usage: extract-metadata.R INPUT [--authors=<authors>] [--subjects=<subjects>] [--items=<items> --logfile=<logfile>]
+Usage: extract-metadata.R INPUT [--authors=<authors>] [--subjects=<subjects>] [--items=<items>] [--logfile=<logfile>]
 
 Options:
   <INPUT>                    Path to XML record from MoML.
