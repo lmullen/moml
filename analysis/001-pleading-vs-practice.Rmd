@@ -1,0 +1,141 @@
+---
+title: "Pleading vs Practice"
+author: "Lincoln Mullen"
+date: "August 10, 2016"
+output: 
+  html_notebook: 
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(dplyr)
+library(knitr)
+library(lubridate)
+library(stringr)
+library(purrr)
+library(tidyr)
+library(ggplot2)
+
+us_authors <- read_csv("../data/us-authors.csv", col_types = "cccccc")
+us_items <- read_csv("../data/us-items.csv",
+                     col_types = cols(.default = col_character(), 
+                                      document_id = col_character(),
+                                      publication_date = col_date(format = ""),
+                                      release_date = col_date(format = ""),
+                                      volume_current = col_integer(),
+                                      volume_total = col_integer(),
+                                      page_count = col_integer()
+                                      )
+                     )
+us_subjects <- read_csv("../data/us-subjects.csv",
+                        col_types = cols(document_id = col_character(), 
+                                         subject_source = col_character(),
+                                         subject_type = col_character(),
+                                         subject = col_character()
+                                         )
+                        )
+```
+
+In this notebook we are looking at the subjects and titles applied to the US items in the Making of Modern Law. The aim is to chart the trends in terms such as "practice" and "pleading." 
+
+Beginning with the subjects: There are two kinds of subject tags applied in the MoML metadata: Library of Congress subject headings, and categories which must have been assigned by Gale. Here are two tables with the top twenty subjects, with counts of how many items have been assigned that subject.
+
+```{r}
+us_subjects_moml <- us_subjects %>% 
+  filter(subject_source == "MOML",
+         subject != "US") %>% 
+  distinct(document_id, subject)
+
+us_subjects_moml %>% 
+  count(subject) %>% 
+  arrange(desc(n)) %>% 
+  mutate(percent = round(n / nrow(us_items), 3)) %>% 
+  head(20)
+```
+
+```{r}
+us_subjects_loc <- us_subjects %>% 
+  filter(subject_source == "LOC")
+
+us_subjects_loc %>% 
+  count(subject) %>% 
+  arrange(desc(n)) %>% 
+  mutate(percent = round(n / nrow(us_items), 3)) %>% 
+  head(20)
+```
+
+The MoML subjects are much broader than the LoC subjects, but even so, in both cases the subjects are relatively diffuse, with all but the most commonly used subjects accounting for only a few percentage points.
+
+Let's see all the LoC subjects that contain "practice," "procedure", or "pleading."
+
+```{r}
+us_subjects_loc %>% 
+  count(subject) %>% 
+  arrange(desc(n)) %>% 
+  mutate(percent = round(n / nrow(us_items), 3)) %>% 
+  filter(str_detect(subject, regex("practice|procedure|pleading", 
+                                   ignore_case = TRUE))) %>% 
+  head(20)
+```
+
+We will get better results if we keep just the first part of the subject.
+
+```{r}
+first_subject <- function(x) {
+  str_split_fixed(x, " -- ", 3)[,1, drop = TRUE]
+}
+
+us_subjects_loc %>% 
+  mutate(subject = first_subject(subject)) %>% 
+  count(subject) %>% 
+  arrange(desc(n)) %>% 
+  mutate(percent = round(n / nrow(us_items), 3)) %>% 
+  filter(str_detect(subject, regex("practice|procedure|pleading", 
+                                   ignore_case = TRUE))) %>% 
+  head(20)
+```
+
+We want to get a sense of the relative change in certain terms over time.
+
+```{r}
+items_per_year <- us_items %>%
+  mutate(year = year(publication_date)) %>%
+  count(year) %>% 
+  rename(total = n)
+
+subject_counts_by_year <- us_items %>% 
+  mutate(year = year(publication_date)) %>% 
+  left_join(us_subjects_loc, by = "document_id") %>% 
+  mutate(subject = first_subject(subject)) %>% 
+  group_by(document_id) %>% 
+  mutate(practice = any(str_detect(subject, fixed("practice", ignore_case = TRUE))),
+         pleading = any(str_detect(subject, fixed("pleading", ignore_case = TRUE))),
+         procedure = any(str_detect(subject, fixed("procedure", ignore_case = TRUE)))) %>% 
+  ungroup() %>% 
+  distinct(document_id, year, practice, pleading, procedure) %>% 
+  group_by(year) %>% 
+  summarize(practice = sum(practice),
+            pleading = sum(pleading),
+            procedure = sum(procedure)) %>% 
+  gather(word, n, -year) %>% 
+  left_join(items_per_year, by = "year") %>% 
+  mutate(percentage = n / total) %>% 
+  filter(year > 1790,
+         year < 1926)
+
+ggplot(subject_counts_by_year, aes(x = year, y = n, color = word)) +
+  geom_point(alpha = 0.25) + 
+  geom_smooth(span = 0.1, se = FALSE) + 
+  theme_minimal() +
+  labs(title = "Change in counts of treatises with given words in LoC subjects")
+
+ggplot(subject_counts_by_year, aes(x = year, y = percentage, color = word)) +
+  geom_point(alpha = 0.25) + 
+  geom_smooth(span = 0.1, se = FALSE) + 
+  theme_minimal() +
+  labs(title = "Change in percentage of treatises with given words in LoC subjects")
+```
+
+
