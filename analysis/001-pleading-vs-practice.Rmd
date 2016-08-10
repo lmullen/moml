@@ -17,6 +17,7 @@ library(stringr)
 library(purrr)
 library(tidyr)
 library(ggplot2)
+library(RcppRoll)
 
 us_authors <- read_csv("../data/us-authors.csv", col_types = "cccccc")
 us_items <- read_csv("../data/us-items.csv",
@@ -36,6 +37,16 @@ us_subjects <- read_csv("../data/us-subjects.csv",
                                          subject = col_character()
                                          )
                         )
+
+biographies <- us_subjects %>% 
+  filter(str_detect(subject, fixed("biography", ignore_case = TRUE)))
+
+# Get rid of all the biographies, and keep only the first volume from collections.
+# Items with multiple volumes have numbered volumes; items with a single volume have
+# a volume number of 0.
+us_items <- us_items %>% 
+  anti_join(biographies, by = "document_id") %>% 
+  filter(volume_current <= 1)
 ```
 
 In this notebook we are looking at the subjects and titles applied to the US items in the Making of Modern Law. The aim is to chart the trends in terms such as "practice" and "pleading." 
@@ -173,5 +184,31 @@ ggplot(words_in_titles_by_year, aes(x = year, y = percentage, color = word)) +
   geom_smooth(span = 0.1, se = FALSE) + 
   theme_minimal() +
   labs(title = "Percentage of treatises with given words in titles")
+```
+
+
+Clean up the chart of titles.
+
+```{r}
+roll_period <- 10
+words_in_titles_by_year %>% 
+  filter(word != "practice",
+         year >= 1800) %>% 
+  mutate(rolling_n = roll_mean(n, n = roll_period, align = "center", fill = NA_real_),
+         rolling_total = roll_mean(total, n = roll_period, align = "center", fill = NA_real_),
+         rolling_percentage = rolling_n / rolling_total) %>% 
+  filter(year <= 1920) %>% 
+  ggplot(aes(x = year, y = rolling_percentage, color = word)) +
+  geom_line() +
+  theme_minimal() +
+  scale_x_continuous(name = "", limits = c(1810, 1935), 
+                     breaks = seq(1810, 1920, by = 10)) +
+  scale_y_continuous(name = "Treatises (%)", labels = scales::percent) + 
+  guides(color = FALSE) +
+  labs(title = "Procedure replaces pleading",
+       subtitle = "10-year rolling average of key terms in titles of legal treatises",
+       caption = 'Data: "The Making of Modern Law: Legal Treatises"') +
+  annotate("text", x = 1921, y = 0.0555, hjust = 0, label = "Procedure") +
+  annotate("text", x = 1921, y = 0.0220, hjust = 0, label = "Pleading")
 ```
 
