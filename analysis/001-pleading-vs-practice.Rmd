@@ -129,13 +129,49 @@ ggplot(subject_counts_by_year, aes(x = year, y = n, color = word)) +
   geom_point(alpha = 0.25) + 
   geom_smooth(span = 0.1, se = FALSE) + 
   theme_minimal() +
-  labs(title = "Change in counts of treatises with given words in LoC subjects")
+  labs(title = "Counts of treatises with given words in LoC subjects")
 
 ggplot(subject_counts_by_year, aes(x = year, y = percentage, color = word)) +
   geom_point(alpha = 0.25) + 
   geom_smooth(span = 0.1, se = FALSE) + 
   theme_minimal() +
-  labs(title = "Change in percentage of treatises with given words in LoC subjects")
+  labs(title = "Percentage of treatises with given words in LoC subjects")
 ```
 
+We also want to see the trend in those terms in the titles of treatises.
+
+```{r}
+words_in_titles_by_year <- us_items %>% 
+  mutate(year = year(publication_date)) %>% 
+  group_by(document_id) %>% 
+  mutate(practice = any(str_detect(title_full,
+                                   fixed("practice", ignore_case = TRUE))),
+         pleading = any(str_detect(title_full,
+                                   fixed("pleading", ignore_case = TRUE))),
+         procedure = any(str_detect(title_full, 
+                                    fixed("procedure", ignore_case = TRUE)))) %>% 
+  ungroup() %>% 
+  distinct(document_id, year, practice, pleading, procedure) %>% 
+  group_by(year) %>% 
+  summarize(practice = sum(practice),
+            pleading = sum(pleading),
+            procedure = sum(procedure)) %>% 
+  gather(word, n, -year) %>% 
+  left_join(items_per_year, by = "year") %>% 
+  mutate(percentage = n / total) %>% 
+  filter(year > 1790,
+         year < 1926)
+
+ggplot(words_in_titles_by_year, aes(x = year, y = n, color = word)) +
+  geom_point(alpha = 0.25) + 
+  geom_smooth(span = 0.2, se = FALSE) + 
+  theme_minimal() +
+  labs(title = "Counts of treatises with given words in titles")
+
+ggplot(words_in_titles_by_year, aes(x = year, y = percentage, color = word)) +
+  geom_point(alpha = 0.25) + 
+  geom_smooth(span = 0.1, se = FALSE) + 
+  theme_minimal() +
+  labs(title = "Percentage of treatises with given words in titles")
+```
 
