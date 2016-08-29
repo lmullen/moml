@@ -198,13 +198,14 @@ words_in_titles_by_year %>%
          rolling_total = roll_mean(total, n = roll_period, align = "center", fill = NA_real_),
          rolling_percentage = rolling_n / rolling_total) %>% 
   filter(year <= 1920) %>% 
-  ggplot(aes(x = year, y = rolling_percentage, color = word)) +
+  ggplot(aes(x = year, y = rolling_percentage, linetype = word)) +
   geom_line() +
   theme_minimal() +
   scale_x_continuous(name = "", limits = c(1810, 1935), 
                      breaks = seq(1810, 1920, by = 10)) +
   scale_y_continuous(name = "Treatises (%)", labels = scales::percent) + 
-  guides(color = FALSE) +
+  scale_linetype_manual(values = c(2, 1)) +
+  guides(color = FALSE, linetype = FALSE) +
   labs(title = "Procedure replaces pleading",
        subtitle = "10-year rolling average of key terms in titles of legal treatises",
        caption = 'Data: "The Making of Modern Law: Legal Treatises"') +

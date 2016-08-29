@@ -1,0 +1,74 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+library(mullenMisc)
+
+us_authors <- read_csv("../data/us-authors.csv", col_types = "cccccc")
+us_items <- read_csv("../data/us-items.csv",
+                     col_types = cols(.default = col_character(), 
+                                      document_id = col_character(),
+                                      publication_date = col_date(format = ""),
+                                      release_date = col_date(format = ""),
+                                      volume_current = col_integer(),
+                                      volume_total = col_integer(),
+                                      page_count = col_integer()))
+
+us_subjects <- read_csv("../data/us-subjects.csv",
+                        col_types = cols(document_id = col_character(), 
+                                         subject_source = col_character(),
+                                         subject_type = col_character(),
+                                         subject = col_character()))
+
+biographies <- us_subjects %>% 
+  filter(str_detect(subject, fixed("biography", ignore_case = TRUE)))
+
+# Get rid of all the biographies, and keep only the first volume from collections.
+# Items with multiple volumes have numbered volumes; items with a single volume have
+# a volume number of 0.
+us_items <- us_items %>% 
+  anti_join(biographies, by = "document_id") %>% 
+  filter(publication_date > as.Date("1750-01-1"))
+```  
+
+Let's compare the lengths of items with "pleading" and "procedure" in the title.
+
+```{r}
+check_title <- function(x, keyword) {
+  str_detect(x, coll(keyword, ignore_case = TRUE))
+}
+
+item_lengths_by_keyword <- us_items %>%
+  mutate(year = year(publication_date),
+         decade = round_year(year, "decade")) %>%
+  select(year, decade, title = title_full, page_count) %>% 
+  group_by(year, decade, title) %>% 
+  summarize(page_count = sum(page_count)) %>% 
+  mutate(pleading = check_title(title, "pleading"),
+         procedure = check_title(title, "procedure"),
+         # practice = check_title(title, "practice"),
+         all = TRUE) %>% 
+  gather(keyword, match_keyword, -year, -decade, -title, -page_count) %>% 
+  filter(match_keyword) 
+
+ggplot(item_lengths_by_keyword, aes(x = year, y = page_count, color = keyword)) +
+  geom_smooth() +
+  theme_minimal() +
+  # geom_point(data = filter(item_lengths_by_keyword, keyword != "all"),
+  #            alpha = 0.2) +
+  ggtitle("Lengths of treatises by keywords in title")  +
+  ylim(0, 7000) +
+  xlim(1840, 1930)
+```
+
+
+
