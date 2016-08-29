@@ -3,3 +3,6 @@
 .RData
 .Ruserdata
 test
+data/us-authors.csv
+data/us-items.csv
+data/us-subjects.csv
