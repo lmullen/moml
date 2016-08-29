@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 #
-# Extract metadata from Making of Modern Law XML files
+# Extract document-level metadata from a Making of Modern Law XML file
 
 suppressPackageStartupMessages(library(docopt))
 suppressPackageStartupMessages(library(magrittr))
@@ -39,8 +39,7 @@ log_formatter <- function(event) {
   paste(c(format(event$time, "%Y-%m-%d %H:%M:%OS3"), event$level, opt$INPUT,
           event$message), collapse = " - ")
 }
-log_file("logs/extract-metadata.log", .formatter = log_formatter,
-         overwrite = FALSE)
+log_file(opt$logfile, .formatter = log_formatter, overwrite = FALSE)
 
 # Check inputs for errors
 stopifnot(file.exists(opt$INPUT))
