@@ -25,7 +25,7 @@ Options:
 " -> doc
 
 opt <- docopt(doc)
-# opt <- docopt(doc, args = "test/20004432800.xml -o temp")
+# opt <- docopt(doc, args = "test/20003495100.xml -o temp")
 
 # Check inputs for errors
 stopifnot(file.exists(opt$INPUT))
@@ -37,6 +37,7 @@ opt$authors  <- str_c(opt$outdir, "/", opt$file_id, "-authors.csv")
 opt$subjects <- str_c(opt$outdir, "/", opt$file_id, "-subjects.csv")
 opt$items    <- str_c(opt$outdir, "/", opt$file_id, "-items.csv")
 opt$pages    <- str_c(opt$outdir, "/", opt$file_id, "-pages.csv")
+if (is.null(opt$logfile)) opt$logfile <- "log/metadata-export.log"
 
 # Logging
 dir.create(dirname(opt$logfile), showWarnings = FALSE)

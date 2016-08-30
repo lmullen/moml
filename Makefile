@@ -12,12 +12,16 @@ PAGES_CSV := $(patsubst %.xml, $(TEMP_DIR)/%-pages.csv, $(notdir $(XML_FILES)))
 AUTHORS_CSV := $(patsubst %.xml, $(TEMP_DIR)/%-authors.csv, $(notdir $(XML_FILES)))
 SUBJECTS_CSV := $(patsubst %.xml, $(TEMP_DIR)/%-subjects.csv, $(notdir $(XML_FILES)))
 
-.PHONY : all clobber clean
+.PHONY : all clobber clean metadata text
 
-.INTERMEDIATE: $(TEXT_CSV) $(ITEMS_CSV) $(PAGES_CSV) $(AUTHORS_CSV) $(SUBJECTS_CSV)
-.SECONDARY: $(DATA_DIR)/us-pages.csv $(DATA_DIR)/us-authors.csv $(DATA_DIR)/us-subjects.csv
+.SECONDARY : $(DATA_DIR)/us-pages.csv $(DATA_DIR)/us-authors.csv $(DATA_DIR)/us-subjects.csv $(TEXT_CSV) $(ITEMS_CSV) $(PAGES_CSV) $(AUTHORS_CSV) $(SUBJECTS_CSV)
 
-all : $(DATA_DIR)/us-items.csv $(DATA_DIR)/us-text.csv
+all :
+	@echo At the moment there is no all task.
+
+metadata : $(DATA_DIR)/us-items.csv
+
+text : $(DATA_DIR)/us-text.csv
 
 $(TEMP_DIR)/%-text.csv : $(US_DIR)/%.xml
 	@echo "`date` - Exporting text from $^" >> logs/text-export.log
