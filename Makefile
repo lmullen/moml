@@ -1,8 +1,9 @@
-DATA_DIR := data
-# DATA_DIR := /media/data/moml/us-export
-US_DIR := test
-# US_DIR := /media/data/moml/MOML_US
-TEMP_DIR := temp
+# DATA_DIR := data
+DATA_DIR := /media/data/moml/us-tables
+# US_DIR := test
+US_DIR := /media/data/moml/MOML_US
+# TEMP_DIR := temp
+TEMP_DIR := /media/data/moml/temp
 
 XML_FILES := $(wildcard $(US_DIR)/*.xml)
 TEXT_CSV := $(patsubst %.xml, $(TEMP_DIR)/%-text.csv, $(notdir $(XML_FILES)))
