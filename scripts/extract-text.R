@@ -8,6 +8,7 @@ suppressPackageStartupMessages(library(xml2))
 suppressPackageStartupMessages(library(tibble))
 suppressPackageStartupMessages(library(loggr))
 suppressPackageStartupMessages(library(purrr))
+suppressPackageStartupMessages(library(tidyr))
 suppressPackageStartupMessages(library(stringr))
 suppressPackageStartupMessages(library(readr))
 
@@ -24,7 +25,7 @@ Options:
 " -> doc
 
 opt <- docopt(doc)
-# opt <- docopt(doc, args = "test/20004432800/xml/20004432800.xml")
+# opt <- docopt(doc, args = "test/19007815300/xml/19007815300.xml")
 
 # Default locations for exporting data
 if (is.null(opt$page_metadata)) opt$page_metadata <- "data/us-page-metadata.csv"
@@ -43,69 +44,51 @@ log_file(opt$logfile, .formatter = log_formatter, overwrite = FALSE)
 stopifnot(file.exists(opt$INPUT))
 stopifnot(dir.exists(dirname(opt$page_metadata)))
 stopifnot(dir.exists(dirname(opt$page_text)))
+stopifnot(dir.exists(dirname(opt$logfile)))
 
 # Read XML
 xml <- read_xml(opt$INPUT)
 
 # We will need the document ID as the key in the tables
-document_id <- xml %>%
-  xml_find_first("bookInfo") %>%
-  xml_child("documentID") %>%
-  xml_contents() %>%
-  as.character()
+document_id <- xml_find_first(xml, "./bookInfo/documentID") %>% xml_text()
 
-# Helper for getting contents of tag
-extract_tag <- function(xml, tag) {
-  out <- xml %>% xml_child(tag) %>% xml_contents() %>% as.character()
-  if (length(out) == 0) out <- NA_character_
-  out
+# Get the page nodes and extract the relevant metadata
+pages       <- xml_find_all(xml, "./text/page")
+page_info   <- xml_find_all(xml, "./text/page/pageInfo")
+type        <- pages %>% xml_attr("type")
+page_id     <- pages %>% xml_find_all("./pageInfo/pageID") %>% xml_text()
+record_id   <- pages %>% xml_find_all("./pageInfo/recordID") %>% xml_text()
+source_page <- page_info %>% xml_child("sourcePage") %>% xml_text()
+ocr         <- pages %>% xml_find_all("./pageInfo/ocr") %>% xml_double()
+
+page_metadata <- data_frame(
+  document_id = document_id,
+  type = type,
+  page_id = page_id,
+  record_id = record_id,
+  source_page = source_page,
+  ocr = ocr
+)
+
+# Turn a paragraph node into a character vector of length 1
+para_to_char <- function(x) {
+  x %>%
+    xml_find_all("./wd") %>%
+    xml_text() %>%
+    str_c(collapse = " ")
 }
 
-# Get the page nodes
-pages <- xml %>%
-  xml_child("text") %>%
-  xml_find_all("page")
-
-# Extract the page level metadata into a data frame
-get_page_metadata <- function(x) {
-  type <- x %>% xml_attr("type")
-  first_page <- x %>% xml_attr("firstPage")
-  page_info <- x %>% xml_child("pageInfo")
-  page_id <- page_info %>% extract_tag("pageID")
-  record_id <- page_info %>% extract_tag("recordID")
-  source_page <- page_info %>% extract_tag("sourcePage")
-  ocr <- page_info %>% extract_tag("ocr") %>% as.numeric()
-
-  data_frame(document_id = document_id,
-             type = type,
-             first_page = first_page,
-             page_id = page_id,
-             record_id = record_id,
-             source_page = source_page,
-             ocr = ocr)
+# Turn a page node into a list of character vectors for each paragraph
+get_paras <- function(x) {
+  x %>%
+    xml_find_all("./pageContent/p") %>%
+    map_chr(para_to_char)
 }
 
-page_metadata <- pages %>% map_df(get_page_metadata)
-
-# Extract the paragraphs in each page
-# Get a character vector of the text from a paragraph node
-get_para <- function(x) {
-  x %>% xml_find_all("wd") %>% xml_text() %>% str_c(collapse = " ")
-}
-
-# Get a data frame of the paragraphs on a page
-get_page_text <- function(x) {
-  page_id <- x %>% xml_child("pageInfo") %>% extract_tag("pageID")
-  paragraphs <- x %>% xml_child("pageContent") %>% xml_find_all("p")
-  paragraph_text <- paragraphs %>% map_chr(get_para)
-  paragraph_number <- seq_along(paragraph_text)
-  data_frame(document_id = document_id,
-             page_id = page_id,
-             text = paragraph_text,
-             paragraph_number = paragraph_number)
-}
-
-page_text <- pages %>% map_df(get_page_text)
+page_text <- data_frame(document_id = document_id,
+                        page_id = page_id,
+                        text = map(pages, get_paras)) %>%
+  unnest(text)
 
 # Write to files, appending if they already exist
 write_csv(page_text, path = opt$page_text,
