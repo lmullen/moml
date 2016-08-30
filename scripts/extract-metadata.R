@@ -10,28 +10,33 @@ suppressPackageStartupMessages(library(tibble))
 suppressPackageStartupMessages(library(lubridate))
 suppressPackageStartupMessages(library(loggr))
 suppressPackageStartupMessages(library(purrr))
+suppressPackageStartupMessages(library(stringr))
+suppressPackageStartupMessages(library(dplyr))
 
-"Extract metadata from XML record from the Making of Modern Law
+"Extract metadata from an XML record from the Making of Modern Law
 
-Usage: extract-metadata.R INPUT [--authors=<authors>] [--subjects=<subjects>] [--items=<items>] [--logfile=<logfile>]
+Usage: extract-metadata.R INPUT --outdir=<outdir> [--logfile=<logfile>]
 
 Options:
   <INPUT>                    Path to XML record from MoML.
-     --authors=<authors>     Path to CSV file to append author metadata.
-     --subjects=<subjects>   Path to CSV file to append subject metadata.
-     --items=<items>         Path to CSV file to append item metadata.
-     --logfile=<logfile>     Path to file for logging.
+  -o --outdir=<outdir>       Directory in which output files will be created.
+  -l --logfile=<logfile>     Path to file for logging.
   -h --help                  Show this message.
 " -> doc
 
 opt <- docopt(doc)
-# opt <- docopt(doc, args = "test/20004432800/xml/20004432800.xml")
+# opt <- docopt(doc, args = "test/20004432800.xml -o temp")
 
-# Default locations for exporting data
-if (is.null(opt$authors)) opt$authors <- "data/authors.csv"
-if (is.null(opt$subjects)) opt$subjects <- "data/subjects.csv"
-if (is.null(opt$items)) opt$items <- "data/items.csv"
-if (is.null(opt$logfile)) opt$logfile <- "logs/extract-metadata.log"
+# Check inputs for errors
+stopifnot(file.exists(opt$INPUT))
+stopifnot(dir.exists(opt$outdir))
+
+# Locations for exporting data
+opt$file_id <- opt$INPUT %>% basename() %>% tools::file_path_sans_ext()
+opt$authors  <- str_c(opt$outdir, "/", opt$file_id, "-authors.csv")
+opt$subjects <- str_c(opt$outdir, "/", opt$file_id, "-subjects.csv")
+opt$items    <- str_c(opt$outdir, "/", opt$file_id, "-items.csv")
+opt$pages    <- str_c(opt$outdir, "/", opt$file_id, "-pages.csv")
 
 # Logging
 dir.create(dirname(opt$logfile), showWarnings = FALSE)
@@ -40,12 +45,6 @@ log_formatter <- function(event) {
           event$message), collapse = " - ")
 }
 log_file(opt$logfile, .formatter = log_formatter, overwrite = FALSE)
-
-# Check inputs for errors
-stopifnot(file.exists(opt$INPUT))
-stopifnot(dir.exists(dirname(opt$authors)))
-stopifnot(dir.exists(dirname(opt$subjects)))
-stopifnot(dir.exists(dirname(opt$items)))
 
 # Read XML and get the relevant metadata portions
 xml <- read_xml(opt$INPUT)
@@ -56,7 +55,7 @@ volume_group <- citation %>% xml_find_first("volumeGroup")
 imprint <- citation %>% xml_find_first("imprint")
 
 extract_tag <- function(xml, tag) {
-  out <- xml %>% xml_child(tag) %>% xml_contents() %>% as.character()
+  out <- xml %>% xml_child(tag) %>% xml_text()
   if (length(out) == 0) out <- NA_character_
   out
 }
@@ -122,7 +121,7 @@ loc_subjects_df <- book_info %>%
   xml_find_all("locSubjectHead") %>%
   map_df(extract_loc_subject)
 
-subjects <- dplyr::bind_rows(moml_subjects_df, loc_subjects_df)
+subjects <- bind_rows(moml_subjects_df, loc_subjects_df)
 
 extract_author <- function(ag) {
   author <- ag %>% xml_child() %>% extract_tag("marcName")
@@ -142,7 +141,30 @@ authors <- citation %>%
   xml_find_all("authorGroup") %>%
   map_df(extract_author)
 
-# Write to files, appending if the file already exists
-write_csv(items, path = opt$items, append = file.exists(opt$items))
-write_csv(authors, path = opt$authors, append = file.exists(opt$authors))
-write_csv(subjects, path = opt$subjects, append = file.exists(opt$subjects))
+# Get the page nodes and extract the relevant metadata
+pages       <- xml_find_all(xml, "./text/page")
+page_info   <- xml_find_all(xml, "./text/page/pageInfo")
+type        <- pages %>% xml_attr("type")
+page_id     <- pages %>% xml_find_all("./pageInfo/pageID") %>% xml_text()
+record_id   <- pages %>% xml_find_all("./pageInfo/recordID") %>% xml_text()
+source_page <- page_info %>% xml_child("sourcePage") %>% xml_text()
+ocr         <- pages %>% xml_find_all("./pageInfo/ocr") %>% xml_double()
+
+pages <- data_frame(
+  document_id = document_id,
+  type = type,
+  page_id = page_id,
+  record_id = record_id,
+  source_page = source_page,
+  ocr = ocr
+)
+
+# Write to files and log success
+write_csv(items, path = opt$items, col_names = FALSE)
+log_info(str_c("Wrote item metadata for ", nrow(items), " items."))
+write_csv(authors, path = opt$authors, col_names = FALSE)
+log_info(str_c("Wrote author metadata for ", nrow(authors), " authors."))
+write_csv(subjects, path = opt$subjects, col_names = FALSE)
+log_info(str_c("Wrote subject metadata for ", nrow(subjects), " subjects."))
+write_csv(pages, path = opt$pages, col_names = FALSE)
+log_info(str_c("Wrote page metadata for ", nrow(pages), " pages."))
