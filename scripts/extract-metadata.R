@@ -85,6 +85,7 @@ items <- tibble(
   imprint_city = extract_tag(imprint, "imprintCity"),
   imprint_publisher = extract_tag(imprint, "imprintPublisher"),
   imprint_year = extract_tag(imprint, "imprintYear"),
+  edition = extract_tag(citation, "edition"),
   collation = extract_tag(citation, "collation"),
   publication_place = extract_tag(citation, "publicationPlace"),
   page_count = extract_tag(citation, "totalPages"),
