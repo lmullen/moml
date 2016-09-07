@@ -186,7 +186,8 @@ us_items %>%
   ggplot(aes(x = publication_year, y = percentage)) + 
   geom_point() + geom_smooth(span = 0.3, method = "loess") +
   facet_wrap(~subject, ncol = 3, scales = "free_y") +
-  labs(title = "Change proportion of subjects of treatises")
+  labs(title = "Change proportion of subjects of treatises") +
+  scale_y_continuous(labels = scales::percent)
 ```
 
 Note that the y-scale is not fixed.
