@@ -1,0 +1,192 @@
+---
+title: "Exploratory analysis of treatise metadata"
+output: html_notebook
+author: "Lincoln Mullen"
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(knitr)
+library(stringr)
+library(ggplot2)
+library(forcats)
+
+load("../data/us-metadata.rda")
+
+pnum <- function(x) prettyNum(x, big.mark = ",")
+```
+
+We have a collection of `r pnum(nrow(us_items))` volumes of legal treatises published in the United States, as collected in *The Making of Modern Law: Legal Treatises*. We want to figure out the basics of what is in this corpus, along with figuring out some of the elements of the publication history of the corpus.
+
+## What is in the corpus?
+
+The simplest way to find out what is in the corpus is to look at the subject headings which have been assigned to the items. There are two kinds of subject headings, Library of Congress subject terms, and terms which must have been assigned by Gale. The terms assigned by Gale appear to be much less specific. But we will compare the two to get a sense of the main subject matter in the corpus.
+
+### MoML categories
+
+```{r}
+us_subjects_moml %>% 
+  count(subject) %>% 
+  arrange(desc(n)) %>% 
+  mutate(percent = round(n / nrow(us_items) * 100, 1),
+         subject = str_trunc(subject, 40)) 
+```
+
+There are `r pnum(length(unique(us_subjects_moml$subject)))` unique MoML categories.
+
+These categories are quite useful, since they correspond to the current categorization of the law. However, if we are interested in how the categorization of the law changed over time, then perhaps we will need better categories.
+
+Note that there are 864 biographies, or 4 percent of the corpus. We don't want those, so we will remove them from our analysis. There are also topics such as "Collected essays" and "Legal history" which we might want to remove.
+
+These are the legal history titles.
+
+```{r}
+us_subjects_moml %>% 
+  filter(subject == "Legal History") %>% 
+  left_join(us_items, by = "document_id") %>% 
+  filter(!is.na(title_full)) %>% 
+  transmute(title = str_trunc(title_full, 80))
+```
+
+These are the collected essay titles:
+
+```{r}
+us_subjects_moml %>% 
+  filter(subject == "Collected Essays") %>% 
+  left_join(us_items, by = "document_id") %>% 
+  transmute(title_display = str_trunc(title_display, 80))
+```
+
+We are probably justified in excluding at least those three categories as not really being treatises in any sense of the term.
+
+### LoC categories
+
+We can also see what is in the Library of Congress categories.
+
+```{r}
+us_subjects_loc %>% 
+  count(subject) %>% 
+  arrange(desc(n)) %>% 
+  mutate(percent = round(n / nrow(us_items) * 100, 1),
+         subject = str_trunc(subject, 40)) 
+```
+
+There are far more Library of Congress categories: `r pnum(length(unique(us_subjects_loc$subject)))` unique categories. And the biggest categories have a much smaller percentages of items than the MoML.
+
+Somewhat more interesting is the observation that civil procedure is the top MoML subject, but the Library of Congress subject heading for "civil procedure" has many fewer volumes. We will have to keep these differences in mind.
+
+### Exclude unwanted categories
+
+We want to exclude the categories which are biographical or otherwise unlikely to be actual treatises. We do that by getting a list of an items which *are* biographical or so on, and then removing them from the main list of items.
+
+```{r}
+excluded_categories <- c("Biography", "Legal History", "Collected Essays")
+to_exclude <- us_subjects_moml %>% 
+  filter(subject %in% excluded_categories) 
+
+us_items <- anti_join(us_items, to_exclude, by = "document_id") 
+```
+
+Now we have only `r pnum(nrow(us_items))` volumes to deal with.
+
+## Publication history
+
+Now we can look into the publication history of treatises.
+
+### How long
+
+We can do a simple histogram to get a sense of how long these treatises are.
+
+```{r}
+us_items %>% 
+  ggplot(aes(page_count)) +
+  geom_histogram(binwidth = 10) +
+  xlim(0, 1000) +
+  labs(title = "Histogram of treatise lengths")
+```
+
+Some of these items are obviously not treatises, given that they are only a few pages long. We should exclude all items below a certain threshold. For now this is somewhat arbitrary, but we might be able to find a reasonable figure.
+
+```{r}
+us_items <- us_items %>% 
+  filter(page_count > 50)
+```
+
+### When
+
+How many treatises were published per year? We will exclude obvious errors in years, plus the last couple of years in the dataset which are obviously incomplete.
+
+```{r}
+publications_per_year <- us_items %>% 
+  count(publication_year) %>% 
+  arrange(desc(publication_year))
+
+ggplot(publications_per_year, aes(x = publication_year, y = n)) +
+  geom_line() +
+  labs(title = "Treatises published per year")
+```
+
+### Where
+
+We can also ask which cities were most frequently publication places.
+
+```{r}
+items_per_city <- us_items %>% 
+  mutate(city = fct_lump(city, n = 30)) %>% 
+  count(city) %>% 
+  mutate(percent = round(n / sum(n) * 100, 1)) %>% 
+  arrange(desc(n))
+items_per_city
+
+ggplot(items_per_city, aes(x = fct_reorder(city, percent), y = percent)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(x = "city", 
+       title = "Volumes published per city")
+```
+
+Unsurprisingly New York is the most common publication city. But there are also many other cities which are represented, which makes sense if those treatises cover state topics. So that is a question for further investigation.
+
+## Combining variables
+
+We can make some of the charts above better by showing how they change over time.
+
+```{r}
+us_items %>% 
+  group_by(publication_year) %>% 
+  summarize(avg_length = mean(page_count)) %>% 
+  ggplot(aes(publication_year, avg_length)) + 
+  geom_point() + 
+  geom_smooth(method = "loess") +
+  labs(title = "Average length of a legal treatise volume")
+```
+
+Note that we are dealing with volumes, not titles. So we would have to first calculate the total per title.
+
+### Changing subjects over time
+
+Using the MOML subjects, let's see how the most common subjects changed over time.
+
+```{r, fig.height = 12, fig.width=4}
+subjects_lumped <- us_subjects_moml %>% 
+  mutate(subject = fct_lump(subject, n = 32),
+         subject = fct_recode(subject,
+            "Administration of Justice" = "Administration of Justice and Administrative Law",
+            "Constitutional Law" = "Constitutional Law: Special Topics",
+            "Taxation" = "Taxation and Public Finance"))
+
+us_items %>% 
+  left_join(subjects_lumped, by = "document_id") %>% 
+  count(publication_year, subject) %>% 
+  rename(n_with_subject = n) %>% 
+  left_join(publications_per_year, by = "publication_year") %>% 
+  rename(total_published = n) %>% 
+  mutate(percentage = n_with_subject / total_published) %>% 
+  filter(subject != "Other") %>% 
+  ggplot(aes(x = publication_year, y = percentage)) + 
+  geom_point() + geom_smooth(span = 0.3, method = "loess") +
+  facet_wrap(~subject, ncol = 3, scales = "free_y") +
+  labs(title = "Change proportion of subjects of treatises")
+```
+
+Note that the y-scale is not fixed.
