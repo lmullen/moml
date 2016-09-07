@@ -2,9 +2,10 @@
 title: "Pleading vs Practice"
 author: "Lincoln Mullen"
 date: "August 10, 2016"
-output: 
-  html_notebook: 
+output:
+  html_notebook:
     number_sections: yes
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
