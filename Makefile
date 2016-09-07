@@ -19,6 +19,9 @@ SUBJECTS_CSV := $(patsubst %.xml, $(TEMP_DIR)/%-subjects.csv, $(notdir $(XML_FIL
 all :
 	@echo At the moment there is no all task.
 
+data/us-metadata.rda :
+	Rscript scripts/prep-metadata.R
+
 metadata : $(DATA_DIR)/us-items.csv
 
 text : $(DATA_DIR)/us-text.csv
