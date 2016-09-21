@@ -1,0 +1,129 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Vectorize a subcorpus.
+
+```{r}
+library(tokenizers)
+library(text2vec)
+library(readr)
+library(doParallel)
+library(Matrix)
+library(broom)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+
+load("../data/us-metadata.rda")
+
+N_WORKERS <- 8
+registerDoParallel(N_WORKERS)
+
+files <- list.files("/media/data/moml/subsets/medical-jurisprudence", 
+                    pattern = "*.txt",
+                    full.names = TRUE)
+
+reader <- function(f) {
+  require(stringr)
+  n <- basename(f) %>% str_replace("\\.txt", "")
+  doc <- readr::read_file(f)
+  names(doc) <- n
+  doc
+}
+
+jobs <- files %>% 
+  split_into(N_WORKERS) %>% 
+  lapply(ifiles, reader = reader) %>% 
+  lapply(itoken, chunks_number = 1, tokenizer = tokenizers::tokenize_words,
+         progressbar = FALSE)
+  
+vocab <- create_vocabulary(jobs)
+pruned <- prune_vocabulary(vocab, term_count_min = 10,
+                           term_count_max = 50e3)
+message("Keeping ", round(nrow(pruned$vocab) / nrow(vocab$vocab), 3) * 100,
+        "% of the vocabulary.")
+vectorizer <- vocab_vectorizer(pruned)
+
+dtm <- create_dtm(jobs, vectorizer)
+```
+
+Count the vocabulary.
+
+```{r}
+rowSums(dtm) %>% tidy() %>% View
+
+dtm[ , c("medical", "insanity", "child")] %>% tidy() %>% View
+
+
+# %>% 
+#   tidy() %>% 
+#   arrange(desc(x))
+```
+
+Make a chart of certain words.
+
+```{r}
+dtm_to_df <- function(x, words) {
+  require(dplyr)
+  require(tibble)
+  require(stringr)
+  require(Matrix)
+  stopifnot(is.character(words))
+  out <- as_tibble(as.data.frame(as.matrix(x[, words])))
+  colnames(out) <- words
+  ids <- str_replace_all(rownames(x), "\\.txt", "")
+  ids <- str_split_fixed(ids, "-", n = 2)
+  out %>% 
+    mutate(document_id = ids[ , 1, drop = TRUE],
+           page_id = ids[ , 2, drop = TRUE]) %>% 
+    select(document_id, page_id, everything())
+}
+
+words_of_interest <- c("man", "woman", "male", "female", "child")
+
+counts <- dtm_to_df(dtm, words_of_interest) %>% 
+  gather(word, count, -document_id, -page_id) %>% 
+  filter(count > 0)
+
+item_years <- us_items %>% 
+  select(document_id, publication_year)
+
+# Still needs to be normalized
+counts %>% 
+  group_by(document_id, word) %>% 
+  summarize(count = sum(count)) %>% 
+  left_join(item_years, by = "document_id") %>% 
+  group_by(publication_year, word) %>% 
+  summarize(count = sum(count)) %>% 
+  ggplot(aes(x = publication_year, y = count, color = word)) +
+  geom_point() +
+  geom_smooth(span = 0.1, se = FALSE) +
+  labs(title = "Word use over time in medical jurisprudence treatises") + 
+  xlim
+```
+
+Distance functions
+
+```{r}
+distances <- dist2(dtm[1, , drop = FALSE], dtm[1:1e3, ])
+distances2 <- distances[1, ] %>% sort()
+head(distances2)
+tail(distances2)
+range(distances2)
+
+similarities <- wordVectors::cosineSimilarity(dtm[1:1000, , drop = FALSE], 
+                                              dtm[1:1000, , drop = FALSE])
+similarities %>% View
+```
+
+
+TF-IDF
+
+```{r}
+model_tfidf <-  TfIdf$new()
+dtm_tfidf <- model_tfidf$transform(dtm)
+```
+
