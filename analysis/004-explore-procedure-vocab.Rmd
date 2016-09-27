@@ -5,7 +5,7 @@ output: html_notebook
 
 Vectorize a subcorpus.
 
-```{r}
+```{r, include=TRUE}
 library(tokenizers)
 library(text2vec)
 library(readr)
@@ -116,7 +116,7 @@ range(distances2)
 
 similarities <- wordVectors::cosineSimilarity(dtm[1:1000, , drop = FALSE], 
                                               dtm[1:1000, , drop = FALSE])
-similarities %>% View
+similarities 
 ```
 
 
