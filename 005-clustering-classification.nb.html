@@ -177,15 +177,18 @@ $(document).ready(function () {
 <p>Read in the metadata and a sample corpus of documents (as opposed to pages).</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-output-begin eyJkYXRhIjoiVGhlIHdvcmtpbmcgZGlyZWN0b3J5IHdhcyBjaGFuZ2VkIHRvIC9ob21lL2xtdWxsZW4vRHJvcGJveC9UcmFuc2ZlciAoS2VsbGVuLUxpbmNvbG4pL21vbWwvYW5hbHlzaXMgaW5zaWRlIGEgbm90ZWJvb2sgY2h1bmsuIFRoZSB3b3JraW5nIGRpcmVjdG9yeSB3aWxsIGJlIHJlc2V0IHdoZW4gdGhlIGNodW5rIGlzIGZpbmlzaGVkIHJ1bm5pbmcuIFVzZSB0aGUga25pdHIgcm9vdC5kaXIgb3B0aW9uIGluIHRoZSBzZXR1cCBjaHVuayB0byBjaGFuZ2UgdGhlIHRoZSB3b3JraW5nIGRpcmVjdG9yeSBmb3Igbm90ZWJvb2sgY2h1bmtzLlxuIn0= -->
-<pre><code>The working directory was changed to /home/lmullen/Dropbox/Transfer (Kellen-Lincoln)/moml/analysis inside a notebook chunk. The working directory will be reset when the chunk is finished running. Use the knitr root.dir option in the setup chunk to change the the working directory for notebook chunks.</code></pre>
+<!-- rnb-output-begin eyJkYXRhIjoiVGhlIHdvcmtpbmcgZGlyZWN0b3J5IHdhcyBjaGFuZ2VkIHRvIC9ob21lL2xtdWxsZW4vRHJvcGJveC9UcmFuc2ZlciAoS2VsbGVuLUxpbmNvbG4pL21vbWwgaW5zaWRlIGEgbm90ZWJvb2sgY2h1bmsuIFRoZSB3b3JraW5nIGRpcmVjdG9yeSB3aWxsIGJlIHJlc2V0IHdoZW4gdGhlIGNodW5rIGlzIGZpbmlzaGVkIHJ1bm5pbmcuIFVzZSB0aGUga25pdHIgcm9vdC5kaXIgb3B0aW9uIGluIHRoZSBzZXR1cCBjaHVuayB0byBjaGFuZ2UgdGhlIHRoZSB3b3JraW5nIGRpcmVjdG9yeSBmb3Igbm90ZWJvb2sgY2h1bmtzLlxuIn0= -->
+<pre><code>The working directory was changed to /home/lmullen/Dropbox/Transfer (Kellen-Lincoln)/moml inside a notebook chunk. The working directory will be reset when the chunk is finished running. Use the knitr root.dir option in the setup chunk to change the the working directory for notebook chunks.</code></pre>
 <!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubG9hZChcImRhdGEvdXMtbWV0YWRhdGEucmRhXCIpXG5gYGAifQ== -->
-<pre class="r"><code>load(&quot;data/us-metadata.rda&quot;)</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucmVhZGVyIDwtIGZ1bmN0aW9uKGYpIHtcbiAgcmVxdWlyZShzdHJpbmdyKVxuICBuIDwtIGJhc2VuYW1lKGYpICU+JSBzdHJfcmVwbGFjZShcIlxcXFwudHh0XCIsIFwiXCIpXG4gIGRvYyA8LSByZWFkcjo6cmVhZF9maWxlKGYpXG4gIG5hbWVzKGRvYykgPC0gblxuICBkb2Ncbn1cbmBgYCJ9 -->
+<pre class="r"><code>reader &lt;- function(f) {
+  require(stringr)
+  n &lt;- basename(f) %&gt;% str_replace(&quot;\\.txt&quot;, &quot;&quot;)
+  doc &lt;- readr::read_file(f)
+  names(doc) &lt;- n
+  doc
+}</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiY2Fubm90IG9wZW4gY29tcHJlc3NlZCBmaWxlICdkYXRhL3VzLW1ldGFkYXRhLnJkYScsIHByb2JhYmxlIHJlYXNvbiAnTm8gc3VjaCBmaWxlIG9yIGRpcmVjdG9yeSdFcnJvciBpbiByZWFkQ2hhcihjb24sIDVMLCB1c2VCeXRlcyA9IFRSVUUpIDogY2Fubm90IG9wZW4gdGhlIGNvbm5lY3Rpb25cbiJ9 -->
-<pre><code>cannot open compressed file 'data/us-metadata.rda', probable reason 'No such file or directory'Error in readChar(con, 5L, useBytes = TRUE) : cannot open the connection</code></pre>
-<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <p>The DTM is a sparse matrix. For the purpose of using the base R clustering functions, we are going to convert it to a non-sparse matrix.</p>

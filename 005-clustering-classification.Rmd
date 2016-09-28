@@ -12,6 +12,7 @@ library(doParallel)
 library(text2vec)
 library(tokenizers)
 library(tidyverse)
+library(ggplot2)
 ```
 
 Read in the metadata and a sample corpus of documents (as opposed to pages).
@@ -59,12 +60,13 @@ dtm2 <- as.matrix(dtm)
 ```{r}
 pca <- prcomp(dtm2, scale. = FALSE)
 plot(pca)
-library(ggplot2)
-library(broom)
-augment(pca) %>% select(1:6) %>% as_tibble()
+augment(pca) %>% select(1:6) %>% as_tibble() %>% View
 augment(pca) %>% 
   ggplot(aes(.fittedPC1, .fittedPC2)) + 
-  geom_point()
+  geom_point() +
+  geom_text_repel(aes(label = .rownames))
+
+library(ggrepel)
 
 model_tfidf <- TfIdf$new()
 dtm_tfidf <- model_tfidf$fit_transform(dtm)
@@ -80,6 +82,14 @@ dtm_tfidf %>%
 ## Kmeans
 
 ```{r}
+km <- kmeans(dtm2, centers = 20)
+
+k_clusters <- tibble(document_id = rownames(dtm2),
+                     cluster = km$cluster) %>% 
+  left_join(us_items, by = "document_id")
+
+k_clusters %>% arrange(cluster) %>% View
+
 km <- kmeans(dtm2, centers = 20)
 
 k_clusters <- tibble(document_id = rownames(dtm2),
@@ -102,6 +112,30 @@ ap_clusters <- map_df(names(ap_clusters), function(x) {
 })
 ap_clusters %>% left_join(us_items, by = "document_id") %>% View
 ```
+
+## Supervised classification
+
+```{r}
+files_med <- list.files("data/medical-documents/",  pattern = "*.txt", 
+                        full.names = TRUE)
+files_rr <- list.files("data/railroads-documents/",  pattern = "*.txt", 
+                       full.names = TRUE)
+
+jobs_ml <- c(files_med, files_rr) %>% 
+  split_into(N_WORKERS) %>% 
+  lapply(ifiles, reader = reader) %>% 
+  lapply(itoken, chunks_number = 1, tokenizer = tokenizers::tokenize_words,
+         progressbar = TRUE)
+  
+vocab_ml <- create_vocabulary(jobs_ml)
+pruned_ml <- prune_vocabulary(vocab_ml, term_count_min = 10,
+                              term_count_max = 25e3)
+message("Keeping ", round(nrow(pruned_ml$vocab) / nrow(vocab_ml$vocab), 3) * 100,
+        "% of the vocabulary.")
+vectorizer_ml <- vocab_vectorizer(pruned_ml)
+dtm_ml <- create_dtm(jobs_ml, vectorizer_ml)
+```
+
 
 
 
