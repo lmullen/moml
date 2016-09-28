@@ -1,0 +1,107 @@
+---
+title: "Clustering and classification"
+output: html_notebook
+---
+
+```{r setup, include = FALSE}
+# library(broom)
+# library(ggplot2)
+# library(tidyr)
+library(Matrix)
+library(doParallel)
+library(text2vec)
+library(tokenizers)
+library(tidyverse)
+```
+
+Read in the metadata and a sample corpus of documents (as opposed to pages).
+
+```{r}
+load("data/us-metadata.rda")
+
+N_WORKERS <- 8
+registerDoParallel(N_WORKERS)
+
+files <- list.files("data/medical-documents/",  pattern = "*.txt", 
+                    full.names = TRUE)
+
+reader <- function(f) {
+  require(stringr)
+  n <- basename(f) %>% str_replace("\\.txt", "")
+  doc <- readr::read_file(f)
+  names(doc) <- n
+  doc
+}
+
+jobs <- files %>% 
+  split_into(N_WORKERS) %>% 
+  lapply(ifiles, reader = reader) %>% 
+  lapply(itoken, chunks_number = 1, tokenizer = tokenizers::tokenize_words,
+         progressbar = TRUE)
+  
+vocab <- create_vocabulary(jobs)
+pruned <- prune_vocabulary(vocab, term_count_min = 10,
+                           term_count_max = 25e3)
+message("Keeping ", round(nrow(pruned$vocab) / nrow(vocab$vocab), 3) * 100,
+        "% of the vocabulary.")
+vectorizer <- vocab_vectorizer(pruned)
+dtm <- create_dtm(jobs, vectorizer)
+```
+
+The DTM is a sparse matrix. For the purpose of using the base R clustering functions, we are going to convert it to a non-sparse matrix.
+
+```{r}
+dtm2 <- as.matrix(dtm)
+```
+
+## Principal components analysis
+
+```{r}
+pca <- prcomp(dtm2, scale. = FALSE)
+plot(pca)
+library(ggplot2)
+library(broom)
+augment(pca) %>% select(1:6) %>% as_tibble()
+augment(pca) %>% 
+  ggplot(aes(.fittedPC1, .fittedPC2)) + 
+  geom_point()
+
+model_tfidf <- TfIdf$new()
+dtm_tfidf <- model_tfidf$fit_transform(dtm)
+
+dtm_tfidf %>% 
+  as.matrix() %>% 
+  prcomp() %>% 
+  augment() %>% 
+  ggplot(aes(.fittedPC1, .fittedPC2)) + 
+  geom_jitter()
+```
+
+## Kmeans
+
+```{r}
+km <- kmeans(dtm2, centers = 20)
+
+k_clusters <- tibble(document_id = rownames(dtm2),
+                     cluster = km$cluster) %>% 
+  left_join(us_items, by = "document_id")
+
+k_clusters %>% arrange(cluster)
+```
+
+## Affinity propagation clustering
+
+```{r}
+library(apcluster)
+clu <- apcluster(negDistMat(r = 2), dtm2, details = TRUE)
+ap_clusters <- clu@clusters 
+names(ap_clusters) <- names(clu@exemplars)
+ap_clusters <- lapply(ap_clusters, names)
+ap_clusters <- map_df(names(ap_clusters), function(x) {
+  tibble(exemplar = x, document_id = ap_clusters[[x]])
+})
+ap_clusters %>% left_join(us_items, by = "document_id") %>% View
+```
+
+
+
