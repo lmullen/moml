@@ -1,11 +1,10 @@
 ---
 title: "Supervised classification by subject"
 output:
-  html_document: default
   html_notebook: default
 ---
 
-```{r setup}
+```{r setup, include=FALSE}
 library(Matrix)
 library(tidyverse)
 library(stringr)
@@ -14,7 +13,7 @@ library(doParallel)
 library(tokenizers)
 library(text2vec)
 load("data/us-metadata.rda")
-N_WORKERS <- 4
+N_WORKERS <- 8
 registerDoParallel(N_WORKERS)
 set.seed(851)
 ```
@@ -24,8 +23,10 @@ The aim of this notebook is to create a supervised classifier that can tell the 
 First we load in some of the railroad and medical treatises and create a DTM using n-grams.
 
 ```{r}
-railroad <- list.files("~/dev/moml-data/railroads-documents", full.names = TRUE)
-medical  <- list.files("~/dev/moml-data/medical-documents", full.names = TRUE)
+railroad <- list.files("/media/data/moml/subsets/railroads-documents",
+                       full.names = TRUE)
+medical  <- list.files("/media/data/moml/subsets/medical-documents",
+                       full.names = TRUE)
 all_files <- c(railroad, medical)
 keepers <- 75
 subset_files <- c(sample(railroad, keepers), sample(medical, keepers))
