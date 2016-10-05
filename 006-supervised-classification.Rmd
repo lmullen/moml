@@ -1,0 +1,127 @@
+---
+title: "Supervised classification by subject"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+```{r setup}
+library(Matrix)
+library(tidyverse)
+library(stringr)
+library(caret)
+library(doParallel)
+library(tokenizers)
+library(text2vec)
+load("data/us-metadata.rda")
+N_WORKERS <- 4
+registerDoParallel(N_WORKERS)
+set.seed(851)
+```
+
+The aim of this notebook is to create a supervised classifier that can tell the difference between different kinds of legal treatises.
+
+First we load in some of the railroad and medical treatises and create a DTM using n-grams.
+
+```{r}
+railroad <- list.files("~/dev/moml-data/railroads-documents", full.names = TRUE)
+medical  <- list.files("~/dev/moml-data/medical-documents", full.names = TRUE)
+all_files <- c(railroad, medical)
+keepers <- 75
+subset_files <- c(sample(railroad, keepers), sample(medical, keepers))
+
+reader <- function(f) {
+  n <- basename(f) %>% stringr::str_replace("\\.txt", "")
+  doc <- readr::read_file(f)
+  names(doc) <- n
+  doc
+}
+
+tokenizer <- function(x) {
+  tokenizers::tokenize_ngrams(x, n = 3, stopwords = tokenizers::stopwords("en"))
+}
+
+cached_dtm <- "cache/supervised-classification-dtm.rds"
+if (!file.exists(cached_dtm)) {
+  jobs <- subset_files %>% 
+    split_into(N_WORKERS) %>% 
+    map(ifiles, reader = reader) %>% 
+    map(itoken, chunks_number = 1, tokenizer = tokenizer, progressbar = FALSE)
+  vocab <- create_vocabulary(jobs)
+  pruned <- prune_vocabulary(vocab, term_count_min = 20,
+                             doc_proportion_min = 0.1,
+                             doc_proportion_max = 0.9)
+  message("Keeping ", round(nrow(pruned$vocab) / nrow(vocab$vocab), 4) * 100,
+          "% of the vocabulary.")
+  vectorizer <- vocab_vectorizer(pruned)
+  dtm <- create_dtm(jobs, vectorizer)
+  dir.create(dirname(cached_dtm), showWarnings = FALSE)
+  saveRDS(dtm, cached_dtm)
+} else {
+  dtm <- readRDS(cached_dtm)
+}
+```
+
+Notice that the DTM is not huge, since we pruned the vocabulary quite a bit.
+
+```{r}
+dim(dtm)
+```
+
+Now we want to create a data frame which knows whether each document is from the railroads subcorpus or the medical subcorpus. 
+
+```{r}
+documents <- data_frame(document_id = rownames(dtm)) %>% 
+  left_join(us_subjects_moml, by = "document_id") %>% 
+  group_by(document_id) %>% 
+  mutate(subject = if_else(str_detect(subject, "Medical"), "medical", "railroad")) %>% 
+  distinct(document_id, subject, .keep_all = TRUE) %>% 
+  ungroup() 
+documents %>% count(subject)
+stopifnot(all(documents$document_id == rownames(dtm))) # just to make sure
+```
+
+Now we are going to create a training set and a test set of the data.
+
+```{r}
+split_i <- createDataPartition(y = documents$subject, p = 0.7)
+training <- as.matrix(dtm[split_i$Resample1, ])
+training_labels <- as.factor(documents$subject[split_i$Resample1])
+testing <- as.matrix(dtm[-split_i$Resample1, ])
+testing_labels <- as.factor(documents$subject[-split_i$Resample1])
+```
+
+Now we train a model.
+
+```{r}
+tr_ctrl <- trainControl(method = "repeatedcv",
+             number = 5, 
+             repeats = 5,
+             savePredictions = "final",
+             classProbs = TRUE,
+             summaryFunction = twoClassSummary)
+
+model <- train(training, training_labels, 
+               method = "knn",
+               tuneLength = 10,
+               preProcess = c("center", "scale"),
+               trControl = tr_ctrl)
+model
+```
+
+Now that we have a model, we can predict the results of our training data. We can create a confusion matrix to compare the results that our model gets with the results that we know are true.
+
+```{r}
+training_predictions <- predict(model, training)
+confusionMatrix(training_predictions, training_labels)
+```
+
+But the real proof of the pudding is on what the model can do with data it *hasn't* seen yet. That's why we have the test data.
+
+```{r}
+testing_predictions <- predict(model, testing)
+confusionMatrix(testing_predictions, testing_labels)
+```
+
+
+
