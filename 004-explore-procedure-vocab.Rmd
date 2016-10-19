@@ -17,7 +17,7 @@ library(tidyr)
 library(ggplot2)
 library(stringr)
 
-load("../data/us-metadata.rda")
+load("data/us-metadata.rda")
 
 N_WORKERS <- 8
 registerDoParallel(N_WORKERS)
@@ -126,4 +126,3 @@ TF-IDF
 model_tfidf <-  TfIdf$new()
 dtm_tfidf <- model_tfidf$transform(dtm)
 ```
-
