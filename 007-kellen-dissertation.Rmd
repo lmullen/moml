@@ -1,0 +1,130 @@
+---
+title: "MoML analysis for Kellen's dissertation"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(stringr)
+library(RcppRoll)
+load("data/us-metadata.rda")
+```
+
+We are going to keep one volume per treatise to avoid overcounting multiple volumes. In addition, discard biographies and collected essays, which are not treatises.
+
+```{r}
+to_discard <- us_subjects_moml %>% 
+  filter(str_detect(subject, fixed("biography", ignore_case = TRUE)) |
+         str_detect(subject, fixed("collected essays", ignore_case = TRUE))) %>% 
+  distinct(document_id)
+
+treatises <- us_items %>% 
+  anti_join(biographies, by = "document_id") %>% 
+  filter(volume_current <= 1)
+```
+
+## Changing proportion of procedure and pleading
+
+```{r, eval=FALSE, include=FALSE}
+treatises %>% 
+  select(title_full) %>% 
+  mutate(procedure = str_detect(title_full, regex("procedure", ignore_case = TRUE)),
+         pleading = str_detect(title_full, regex("pleading", ignore_case = TRUE)),
+         `civil procedure` = str_detect(title_full, regex("civil procedure", 
+                                                          ignore_case = TRUE)),
+         `practice ... pleading` = str_detect(title_full,
+                                              regex("practice.+pleading", 
+                                                    ignore_case = TRUE)),
+         practice = str_detect(title_full, regex("practice", ignore_case = TRUE)),
+         `practice + (civil OR courts)` = 
+           str_detect(title_full, regex("(?=.*practice)(?=.*(court|civil))", ignore_case = TRUE))) %>% 
+  gather(term, in_title, -title_full) %>% 
+  filter(in_title) %>% 
+  count(term) %>% View
+```
+
+```{r, warning=FALSE}
+items_per_year <- us_items %>%
+  count(publication_year) %>% 
+  rename(total = n)
+
+words_in_titles_by_year <- treatises %>% 
+  group_by(document_id) %>% 
+  mutate(practice = any(str_detect(title_full,
+                                   fixed("practice", ignore_case = TRUE))),
+         pleading = any(str_detect(title_full,
+                                   fixed("pleading", ignore_case = TRUE))),
+         procedure = any(str_detect(title_full, 
+                                    fixed("procedure", ignore_case = TRUE)))) %>% 
+  ungroup() %>% 
+  distinct(document_id, publication_year, practice, pleading, procedure) %>% 
+  group_by(publication_year) %>% 
+  summarize(practice = sum(practice),
+            pleading = sum(pleading),
+            procedure = sum(procedure)) %>% 
+  gather(word, n, -publication_year) %>% 
+  left_join(items_per_year, by = "publication_year") %>% 
+  mutate(percentage = n / total) %>% 
+  filter(publication_year > 1790,
+         publication_year < 1926)
+
+roll_period <- 10
+words_in_titles_by_year %>% 
+  filter(word != "practice",
+         publication_year >= 1800) %>% 
+  mutate(rolling_n = roll_mean(n, n = roll_period, align = "center", fill = NA_real_),
+         rolling_total = roll_mean(total, n = roll_period, align = "center", fill = NA_real_),
+         rolling_percentage = rolling_n / rolling_total) %>% 
+  filter(publication_year <= 1920) %>% 
+  ggplot(aes(x = publication_year, y = rolling_percentage, linetype = word)) +
+  geom_line() +
+  theme_minimal() +
+  scale_x_continuous(name = "", limits = c(1810, 1935), 
+                     breaks = seq(1810, 1920, by = 10)) +
+  scale_y_continuous(name = "Treatises", labels = scales::percent) + 
+  scale_linetype_manual(values = c(2, 1)) +
+  guides(color = FALSE, linetype = FALSE) +
+  labs(title = "Procedure replaces pleading",
+       subtitle = "10-year rolling average of key terms in titles of legal treatises",
+       caption = 'Data: "The Making of Modern Law: Legal Treatises"') +
+  annotate("text", x = 1921, y = 0.0555, hjust = 0, label = "Procedure") +
+  annotate("text", x = 1921, y = 0.0220, hjust = 0, label = "Pleading")
+
+
+```
+
+## Lengths of different kinds of treatises
+
+```{r, warning=FALSE}
+us_items %>% 
+  anti_join(biographies, by = "document_id") %>% 
+  filter(page_count > 100) %>% 
+  group_by(title_full, publication_year, volume_total) %>% 
+  summarize(page_count = sum(page_count)) %>% 
+  group_by(title_full, publication_year) %>% 
+  mutate(practice = any(str_detect(title_full,
+                                   fixed("practice", ignore_case = TRUE))),
+         pleading = any(str_detect(title_full,
+                                   fixed("pleading", ignore_case = TRUE))),
+         procedure = any(str_detect(title_full, 
+                                    fixed("procedure", ignore_case = TRUE)))) %>% 
+  gather(term, in_document, practice, pleading, procedure) %>% 
+  filter(in_document) %>% 
+  group_by(term, publication_year) %>% 
+  summarize(avg_page_count = mean(page_count)) %>% 
+  mutate(rolling_avg_page_count = roll_mean(avg_page_count, n = roll_period,
+                                            align = "center", fill = NA_real_)) %>% 
+  filter(publication_year <= 1910,
+         term == "procedure") %>% 
+  ggplot(aes(x = publication_year, y = rolling_avg_page_count,
+             linetype = term)) +
+  geom_line() +
+  theme_minimal() + 
+  scale_x_continuous(name = "", limits = c(1810, 1935), 
+                   breaks = seq(1810, 1910, by = 10))
+```
+
+
+## Locations
+
+Perhaps treatises with "code" in the title vs. treatises with "common law"
