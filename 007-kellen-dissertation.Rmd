@@ -126,8 +126,8 @@ us_items %>%
   labs(title = "Changing lengths of treatises on pleading and procedure",
        subtitle = "10-year rolling average of length of treatises by topic",
        caption = 'Data: "The Making of Modern Law: Legal Treatises"') +
-  annotate("text", x = 1911, y = 1250, hjust = 0, label = "Pleading") +
-  annotate("text", x = 1911, y = 900, hjust = 0, label = "Procedure")
+  annotate("text", x = 1911, y = 1270, hjust = 0, label = "Pleading") +
+  annotate("text", x = 1911, y = 890, hjust = 0, label = "Procedure")
 ```
 
 
