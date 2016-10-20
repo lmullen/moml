@@ -87,8 +87,8 @@ words_in_titles_by_year %>%
   labs(title = "Procedure replaces pleading",
        subtitle = "10-year rolling average of key terms in titles of legal treatises",
        caption = 'Data: "The Making of Modern Law: Legal Treatises"') +
-  annotate("text", x = 1921, y = 0.0430, hjust = 0, label = "Procedure") +
-  annotate("text", x = 1921, y = 0.0220, hjust = 0, label = "Pleading")
+  annotate("text", x = 1921, y = 0.0435, hjust = 0, label = "Procedure") +
+  annotate("text", x = 1921, y = 0.0210, hjust = 0, label = "Pleading")
 ```
 
 ## Lengths of different kinds of treatises
