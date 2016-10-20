@@ -19,7 +19,7 @@ to_discard <- us_subjects_moml %>%
   distinct(document_id)
 
 treatises <- us_items %>% 
-  anti_join(biographies, by = "document_id") %>% 
+  anti_join(to_discard, by = "document_id") %>% 
   filter(volume_current <= 1)
 ```
 
@@ -95,7 +95,7 @@ words_in_titles_by_year %>%
 
 ```{r, warning=FALSE}
 us_items %>% 
-  anti_join(biographies, by = "document_id") %>% 
+  anti_join(to_discard, by = "document_id") %>% 
   filter(page_count > 100) %>% 
   group_by(title_full, publication_year, volume_total) %>% 
   summarize(page_count = sum(page_count)) %>% 
@@ -113,13 +113,21 @@ us_items %>%
   mutate(rolling_avg_page_count = roll_mean(avg_page_count, n = roll_period,
                                             align = "center", fill = NA_real_)) %>% 
   filter(publication_year <= 1910,
-         term == "procedure") %>% 
+         term != "practice") %>% 
   ggplot(aes(x = publication_year, y = rolling_avg_page_count,
              linetype = term)) +
   geom_line() +
   theme_minimal() + 
   scale_x_continuous(name = "", limits = c(1810, 1935), 
-                   breaks = seq(1810, 1910, by = 10))
+                   breaks = seq(1810, 1910, by = 10)) +
+  scale_y_continuous(name = "Average number of pages") + 
+  scale_linetype_manual(values = c(2, 1)) +
+  guides(color = FALSE, linetype = FALSE) +
+  labs(title = "Changing lengths of treatises on pleading and procedure",
+       subtitle = "10-year rolling average of length of treatises by topic",
+       caption = 'Data: "The Making of Modern Law: Legal Treatises"') +
+  annotate("text", x = 1911, y = 1250, hjust = 0, label = "Pleading") +
+  annotate("text", x = 1911, y = 900, hjust = 0, label = "Procedure")
 ```
 
 
